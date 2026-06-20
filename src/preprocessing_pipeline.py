@@ -33,6 +33,8 @@ class CustomImputer(BaseEstimator, TransformerMixin):
         #logic from experiments
         X['poutcome'] = X['poutcome'].fillna('other')
         X = X.drop('contact', axis=1, errors='ignore')
+        #experiment with dropping
+        X = X.drop('duration', axis=1, errors='ignore')
 
         return X
     
