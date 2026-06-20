@@ -20,12 +20,13 @@ imports/processes data and then trains the model
 dedicated prediction method
 '''
 class LogisticModel():
-    def __init__(self, name="logistic_model.pk1"):
+    def __init__(self, name="logistic_model.pk1", data_path="data/preprocessed.pk1"):
         #prepare data and split
-
         start_training = time.perf_counter()
-        X, Y = import_data()
-        self.features, self.targets = prepare_data(X, Y)
+        try:
+            self.load_data(data_path)
+        except Exception as e:
+            self.data_setup(data_path)
         self.split_data()
         end_training = time.perf_counter()
 
@@ -40,6 +41,15 @@ class LogisticModel():
 
         print(f'Preprocess time {end_training-start_training:.3f}s')
         print(f'Model time {end_loading-start_loading:.3f}s')
+
+    def data_setup(self, name):
+        #preprocess and split data
+        X, Y = import_data()
+        self.features, self.targets = prepare_data(X, Y)
+        joblib.dump((self.features, self.targets), name)
+
+    def load_data(self, name):
+        self.features, self.targets = joblib.load(name)
 
     def save_model(self, name):
         joblib.dump(self.model, f'saved_models/{name}')
