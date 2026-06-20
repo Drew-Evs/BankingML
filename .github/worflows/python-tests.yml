@@ -1,6 +1,5 @@
 name: Python Unit Tests CI
 
-# Trigger on push/pull requests to main branch
 on:
   push:
     branches: ["main", "master"]
@@ -10,7 +9,7 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -21,13 +20,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install Dependencies
-        run: | 
+        run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-      - name: Add src to path
-        run: echo "PYTHONPATH=./src" >> $GITHUB_ENV
-
       - name: Run unit tests
-        run: | 
-          python -m unittest discover -s tests -p "test_*.py"
+        run: python -m unittest discover -s tests -p "test_*.py"
