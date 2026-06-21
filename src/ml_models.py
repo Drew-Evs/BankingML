@@ -60,10 +60,10 @@ class LogisticModel():
         self.features, self.targets = joblib.load(name)
 
     def save_model(self, name):
-        joblib.dump(self.model, f'saved_models/{name}')
+        joblib.dump(self.model, name)
 
     def load_model(self, name):
-        self.model = joblib.load(f'saved_models/{name}')
+        self.model = joblib.load(name)
 
     def split_data(self):
         #spitting 80/20 for train test
