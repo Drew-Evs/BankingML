@@ -34,7 +34,7 @@ class CustomImputer(BaseEstimator, TransformerMixin):
         X['poutcome'] = X['poutcome'].fillna('other')
         X = X.drop('contact', axis=1, errors='ignore')
         #experiment with dropping
-        X = X.drop('duration', axis=1, errors='ignore')
+        #X = X.drop('duration', axis=1, errors='ignore')
 
         return X
     
@@ -87,6 +87,8 @@ def prepare_data(X, Y):
     X = X[mask]
     Y = Y[mask]
 
+    X, Y = equal_targets(X, Y)
+
     #encoding y with a label encoder
     le = LabelEncoder()
     Y_prepared = le.fit_transform(Y["y"])
@@ -97,6 +99,29 @@ def prepare_data(X, Y):
     X_prepared = pipeline.fit_transform(X)
 
     return X_prepared, Y_prepared
+
+'''
+found that evening the number of yes/no rows improves the flow of the data
+@inputs: X - unfiltered input
+    Y - unfiltered targets
+@returns: X - filtered input
+    Y - equal number of yes/no
+'''
+def equal_targets(X, Y):
+    #work to even classes - stop just selecting no
+    class_0 = Y[Y["y"] == "yes"]
+    class_1 = Y[Y["y"] == "no"]
+
+    #find smallest class and sample the same
+    n = min(len(class_0), len(class_1))
+    class_0 = class_0.sample(n, random_state=42)
+    class_1 = class_1.sample(n, random_state=42)
+
+    #recombine and find matching X rows
+    Y = pd.concat([class_0, class_1]).sort_index()
+    X = X.loc[Y.index]
+
+    return X, Y
 
 if __name__ == "__main__":
     from data_experiments import import_data
