@@ -87,9 +87,6 @@ def prepare_data(X, Y):
     X = X[mask]
     Y = Y[mask]
 
-    #remove for XG testing
-    #X, Y = equal_targets(X, Y)
-
     #encoding y with a label encoder
     le = LabelEncoder()
     Y_prepared = le.fit_transform(Y["y"])

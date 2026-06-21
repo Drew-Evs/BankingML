@@ -1,5 +1,6 @@
 from data_experiments import import_data
 from preprocessing_pipeline import prepare_data
+from optimisation import apply_smote
 
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -159,10 +160,23 @@ class XGBoostModel():
             max_depth=4,
             subsample=0.8,
             colsample_bytree=0.8,
-            eval_metric="hist"
+            eval_metric="logloss"
         )
 
         self.model.fit(self.f_train, self.t_train)
+
+    def smote(self):
+        model_path = os.path.join(BASE_DIR, "saved_models", "smote_XGB_model.pk1")
+        #try to load smote first
+        try:
+            self.load_model(model_path)
+        except Exception as e:
+            #if not then apply smote to training data 
+            self.f_train, self.t_train = apply_smote(self.f_train, self.t_train)
+            #then train and save
+            self.train_model()
+            self.save_model(model_path)
+
 
     def model_results(self):
         t_pred = self.model.predict(self.f_test)
@@ -255,18 +269,23 @@ class NNModel():
 if __name__ == "__main__":
     print("-"*50)
 
-    print("Logistic Model\n")
-    logistic_model = LogisticModel()
-    logistic_model.model_results()
-    print("-"*50)
+    # print("Logistic Model\n")
+    # logistic_model = LogisticModel()
+    # logistic_model.model_results()
+    # print("-"*50)
 
-    print("XGBoost Model\n")
+    print("XGBoost Model:")
     xg_model = XGBoostModel()
     xg_model.model_results()
     print("-"*50)
 
-    print("Neural Net Model\n")
-    nn_model = NNModel()
-    nn_model.model_results()
+    print("XGBoost Model after SMOTE:")
+    xg_model.smote()
+    xg_model.model_results()
     print("-"*50)
+
+    # print("Neural Net Model\n")
+    # nn_model = NNModel()
+    # nn_model.model_results()
+    # print("-"*50)
 
