@@ -127,6 +127,21 @@ class XGBoostModel():
         print(f'Preprocess time {end_training-start_training:.3f}s')
         print(f'Model time {end_loading-start_loading:.3f}s')
 
+    def make_clean(self, model_path="logistic_model.pk1", data_path="data/preprocessed.pk1"):
+        data_path = os.path.join(BASE_DIR, data_path)
+        model_path = os.path.join(BASE_DIR, "saved_models", model_path)
+        sm_model_path = os.path.join(BASE_DIR, "saved_models", "smote_XGB_model.pk1")
+
+        self.data_setup(self.data_path)
+        self.split_data()
+
+        self.train_model()
+        self.save_model(self.model_path)
+
+        self.f_train, self.t_train = apply_smote(self.f_train, self.t_train)
+        self.train_model()
+        self.save_model(sm_model_path)
+
     def data_setup(self, name):
         #preprocess and split data
         X, Y = import_data()
@@ -177,7 +192,6 @@ class XGBoostModel():
             self.train_model()
             self.save_model(model_path)
 
-
     def model_results(self):
         t_pred = self.model.predict(self.f_test)
         print(f"Accuracy : {accuracy_score(self.t_test, t_pred) * 100:.2f}%")
@@ -217,6 +231,16 @@ class NNModel():
 
         print(f'Preprocess time {end_training-start_training:.3f}s')
         print(f'Model time {end_loading-start_loading:.3f}s')
+
+    def make_clean(self, model_path="logistic_model.pk1", data_path="data/preprocessed.pk1"):
+        data_path = os.path.join(BASE_DIR, data_path)
+        model_path = os.path.join(BASE_DIR, "saved_models", model_path)
+
+        self.data_setup(self.data_path)
+        self.split_data()
+
+        self.train_model()
+        self.save_model(self.model_path)
 
     def data_setup(self, name):
         #preprocess and split data
@@ -276,6 +300,7 @@ if __name__ == "__main__":
 
     print("XGBoost Model:")
     xg_model = XGBoostModel()
+    xg_model.make_clean()
     xg_model.model_results()
     print("-"*50)
 

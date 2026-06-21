@@ -5,7 +5,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from data_experiments import import_data
-from preprocessing_pipeline import prepare_data
+#from preprocessing_pipeline import prepare_data
 
 #mearest neightbours for SMOTE
 from sklearn.neighbors import NearestNeighbors
@@ -104,6 +104,16 @@ def calc_info_gain(X, Y):
     info_gain = info_gain.sort_values(by='Info_Gain', ascending=False).reset_index(drop=True)
     return info_gain
 
+#applying info gain
+def apply_info_gain(X_prepared, Y_prepared):
+    #information gain threshold (remove columns that are lower)
+    gain_threshold = 0.002
+    info_gain = calc_info_gain(X_prepared, Y_prepared)
+    cols = info_gain[info_gain['Info_Gain'] <= gain_threshold]['Feature'].tolist()
+    X_prepared = X_prepared.drop(columns=cols, axis=1, errors='ignore')
+    print(f"Dropped {len(cols)} useless features: {cols}")
+    return X_prepared
+
 #and to plot
 def plot_information_gain(info_gain):
     #want top 20 
@@ -137,6 +147,7 @@ if __name__ == "__main__":
     #X, Y = apply_smote(X, Y)
     print("Running Info Gain")
     info_gain = calc_info_gain(X, Y)
+    print(info_gain)
 
     #and plot 
-    plot_information_gain(info_gain)
+    #plot_information_gain(info_gain)

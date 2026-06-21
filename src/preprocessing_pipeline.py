@@ -17,6 +17,8 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn import set_config
 set_config(transform_output="pandas")
 
+from optimisation import apply_info_gain
+
 
 '''
 a custom cleaning/imputing class to control dropping of columns, removing of nan rows
@@ -95,8 +97,10 @@ def prepare_data(X, Y):
     #get the pipeline and transform X
     pipeline = build_pipeline(X)
     X_prepared = pipeline.fit_transform(X)
+    X_prepared = apply_info_gain(X_prepared, Y_prepared)
 
     return X_prepared, Y_prepared
+
 
 '''
 found that evening the number of yes/no rows improves the flow of the data
