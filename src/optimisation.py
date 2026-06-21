@@ -2,9 +2,16 @@
 
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
+
+from data_experiments import import_data
+from preprocessing_pipeline import prepare_data
 
 #mearest neightbours for SMOTE
 from sklearn.neighbors import NearestNeighbors
+
+#calculating information gain
+from sklearn.feature_selection import mutual_info_classif
 
 '''
 for SMOTE to work need to find the mminority class
@@ -78,5 +85,58 @@ def apply_smote(X_train, Y_train, k=6):
     return X_balanced_df, Y_balanced_series
 
 
+'''
+want to study information gain of different features
+allows selecting of the best ones
+@input: X - features post SMOTE
+    Y - targets post SMOTE
+@outputsL info_gain - pddataframe of info gain
+'''
+def calc_info_gain(X, Y):
+    #calculate mutual information score between features and target
+    ig_scores = mutual_info_classif(X, Y, random_state=42)
 
+    #create and sort dataframe
+    info_gain = pd.DataFrame({
+        'Feature': X.columns,
+        'Info_Gain': ig_scores
+    })
+    info_gain = info_gain.sort_values(by='Info_Gain', ascending=False).reset_index(drop=True)
+    return info_gain
 
+#and to plot
+def plot_information_gain(info_gain):
+    #want top 20 
+    plt.figure(figsize=(10, 8))
+    top_features = info_gain.head(20)
+    
+    plt.barh(top_features['Feature'], top_features['Info_Gain'], color='skyblue')
+    plt.gca().invert_yaxis()
+    plt.xlabel('Information Gain Score')
+    plt.title('Feature Importance based on Information Gain')
+    plt.tight_layout()
+    plt.show()
+
+    #and also bottom 20 
+    plt.figure(figsize=(10, 8))
+    bottom_features = info_gain.tail(20)
+    
+    plt.barh(bottom_features['Feature'], bottom_features['Info_Gain'], color='skyblue')
+    plt.gca().invert_yaxis()
+    plt.xlabel('Information Gain Score')
+    plt.title('Feature Importance based on Information Gain')
+    plt.tight_layout()
+    plt.show()
+
+if __name__ == "__main__":
+    #import prep and balance data
+    print("Importing Data")
+    X, Y = import_data()
+    print("Preparing Data")
+    X, Y = prepare_data(X, Y)
+    #X, Y = apply_smote(X, Y)
+    print("Running Info Gain")
+    info_gain = calc_info_gain(X, Y)
+
+    #and plot 
+    plot_information_gain(info_gain)
