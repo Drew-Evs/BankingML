@@ -14,6 +14,10 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import classification_report
 
+#make load paths relative to ml_models
+import os
+BASE_DIR = os.path.dirname(__file__)
+
 '''
 a class using scikitlearn logistic regression for prediction
 imports/processes data and then trains the model
@@ -21,6 +25,10 @@ dedicated prediction method
 '''
 class LogisticModel():
     def __init__(self, name="logistic_model.pk1", data_path="data/preprocessed.pk1"):
+        #relative paths
+        self.data_path = os.path.join(BASE_DIR, data_path)
+        self.model_path = os.path.join(BASE_DIR, "saved_models", name)
+
         #prepare data and split
         start_training = time.perf_counter()
         try:
