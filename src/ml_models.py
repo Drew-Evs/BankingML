@@ -32,19 +32,19 @@ class LogisticModel():
         #prepare data and split
         start_training = time.perf_counter()
         try:
-            self.load_data(data_path)
+            self.load_data(self.data_path)
         except Exception as e:
-            self.data_setup(data_path)
+            self.data_setup(self.data_path)
         self.split_data()
         end_training = time.perf_counter()
 
         start_loading = time.perf_counter()
         #try to load model if it exists if not train and save
         try:
-            self.load_model(name)
+            self.load_model(self.model_path)
         except Exception as e:
             self.train_model()
-            self.save_model(name)
+            self.save_model(self.model_path)
         end_loading = time.perf_counter()
 
         print(f'Preprocess time {end_training-start_training:.3f}s')
