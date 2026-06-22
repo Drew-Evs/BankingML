@@ -4,14 +4,14 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-from data_experiments import import_data
-#from preprocessing_pipeline import prepare_data
-
 #mearest neightbours for SMOTE
 from sklearn.neighbors import NearestNeighbors
 
 #calculating information gain
 from sklearn.feature_selection import mutual_info_classif
+
+#use for an upgraded SMOTE 
+from imblearn.combine import SMOTEENN
 
 '''
 for SMOTE to work need to find the mminority class
@@ -105,10 +105,8 @@ def calc_info_gain(X, Y):
     return info_gain
 
 #applying info gain
-def apply_info_gain(X_prepared, Y_prepared):
+def apply_info_gain(X_prepared, Y_prepared, info_gain, gain_threshold=0):
     #information gain threshold (remove columns that are lower)
-    gain_threshold = 0.002
-    info_gain = calc_info_gain(X_prepared, Y_prepared)
     cols = info_gain[info_gain['Info_Gain'] <= gain_threshold]['Feature'].tolist()
     X_prepared = X_prepared.drop(columns=cols, axis=1, errors='ignore')
     print(f"Dropped {len(cols)} useless features: {cols}")
@@ -138,7 +136,26 @@ def plot_information_gain(info_gain):
     plt.tight_layout()
     plt.show()
 
+'''
+SMOTE didnt work great by itself - need to enn to clean up
+also operate only on the training data
+'''
+def apply_smote_enn(X_train, Y_train):
+    #initate algorithm and fit/resample data
+    smote_enn = SMOTEENN(random_state=42)
+    X_resampled, Y_resampled = smote_enn.fit_resample(X_train, Y_train)
+    
+    #rebuild Pandas DataFrame
+    X_balanced_df = pd.DataFrame(X_resampled, columns=X_train.columns)
+    Y_balanced_series = pd.Series(Y_resampled, name='y')
+    
+    return X_balanced_df, Y_balanced_series
+
 if __name__ == "__main__":
+    #avoid circular imports
+    from data_experiments import import_data
+    from preprocessing_pipeline import prepare_data
+
     #import prep and balance data
     print("Importing Data")
     X, Y = import_data()

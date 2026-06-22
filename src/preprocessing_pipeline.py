@@ -8,7 +8,8 @@ from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 
 #premade methods to scale numeric and encode categories
-from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder
+from sklearn.preprocessing import StandardScaler, OneHotEncoder, LabelEncoder, MinMaxScaler
+
 
 #for more control over the data preprocessing 
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -17,7 +18,11 @@ from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn import set_config
 set_config(transform_output="pandas")
 
-from optimisation import apply_info_gain
+#allow inclusion of SMOTE in the pipeline
+from imblearn.pipeline import Pipeline as ImbPipeline
+from imblearn.combine import SMOTEENN
+
+from optimisation import apply_info_gain, calc_info_gain
 
 
 '''
@@ -32,13 +37,58 @@ class CustomImputer(BaseEstimator, TransformerMixin):
     def transform(self, X):
         X = X.copy()
 
-        #logic from experiments
-        X['poutcome'] = X['poutcome'].fillna('other')
-        X = X.drop('contact', axis=1, errors='ignore')
-        #experiment with dropping
-        #X = X.drop('duration', axis=1, errors='ignore')
+        #need to drop duration (cant know before call)
+        X = X.drop('duration', axis=1, errors='ignore')
 
         return X
+    
+'''
+a custom transformer working with information gain
+    allows placing of feature selection in the pipeline
+'''
+class InfoGainSelection(BaseEstimator, TransformerMixin):
+    def __init__(self, threshold=0.002):
+        self.threshold = threshold
+        self.selected_features = None
+    
+    def fit(self, X, Y):
+        #calculate info gain and filter out lower than threshold
+        info_gain = calc_info_gain(X, Y)
+        self.selected_features = info_gain[info_gain['Info_Gain'] > self.threshold]['Feature'].tolist()
+        return self
+    
+    def transform(self, X):
+        #actually filter out
+        return X[self.selected_features]
+
+'''
+build the updated pipeline
+'''
+def updated_pipeline(X, threshold=0.002):
+    #clean duration column
+    imputer = CustomImputer()
+    X_clean = imputer.transform(X)
+
+    num_cols = X_clean.select_dtypes(include='number').columns
+    cat_cols = X_clean.select_dtypes(include='object').columns
+
+    #preprocess with a one hot encoder
+    preprocessor = ColumnTransformer([
+        ("num", "passthrough", num_cols),
+        ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), cat_cols)
+    ])
+
+    #the full pipeline as described in https://hrcak.srce.hr/file/452496
+    full_pipeline = ImbPipeline([
+        ("imputer", imputer),
+        ("encode", preprocessor),                        
+        ("smote_enn", SMOTEENN(random_state=42)),        
+        ("info_gain", InfoGainSelection(threshold=threshold)),   
+        ("scaler", StandardScaler()),          
+    ])
+
+    return full_pipeline
+
     
 '''
 build the pipeline for processing X
@@ -94,13 +144,30 @@ def prepare_data(X, Y):
     Y_prepared = le.fit_transform(Y["y"])
     Y_prepared = pd.Series(Y_prepared)
     
-    #get the pipeline and transform X
-    pipeline = build_pipeline(X)
-    X_prepared = pipeline.fit_transform(X)
-    X_prepared = apply_info_gain(X_prepared, Y_prepared)
+    #running the pipeline manually for testing
+    imputer = CustomImputer()
+    X_clean = imputer.transform(X)
 
-    return X_prepared, Y_prepared
+    num_cols = X_clean.select_dtypes(include='number').columns
+    cat_cols = X_clean.select_dtypes(include='object').columns
 
+    preprocessor = ColumnTransformer([
+        ("num", "passthrough", num_cols),
+        ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), cat_cols)
+    ])
+    
+    X_encoded = preprocessor.fit_transform(X_clean)
+
+    #applying info gain
+    #selector = InfoGainSelection(threshold=0.0)
+    #X_selected = selector.fit_transform(X_encoded, Y_prepared)
+
+    #then run the scalar
+    scaler = MinMaxScaler()
+    X_final = scaler.fit_transform(X_encoded)
+
+    print(f"Preprocessing Complete. Final Data Shape: {X_final.shape}")
+    return X_final, Y_prepared
 
 '''
 found that evening the number of yes/no rows improves the flow of the data
