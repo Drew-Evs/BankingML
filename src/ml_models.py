@@ -23,6 +23,12 @@ from sklearn.neural_network import MLPClassifier
 from sklearn.metrics import confusion_matrix
 from sklearn.metrics import classification_report
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import roc_curve, roc_auc_score
+
+#for cross validation
+from sklearn.model_selection import StratifiedKFold, cross_validate
+from preprocessing_pipeline import updated_pipeline
+import numpy as np
 
 #make load paths relative to ml_models
 import os
@@ -77,7 +83,8 @@ class LogisticModel():
             test_size=0.2,
             random_state=42
         )
-        #apply smote only on the training data
+
+        #apply smote on the training data
         smote_enn = SMOTEENN(random_state=42)
         self.f_train, self.t_train = smote_enn.fit_resample(self.f_train, self.t_train)
 
@@ -93,6 +100,36 @@ class LogisticModel():
         print(f"Recall   : {recall_score(self.t_test, t_pred) * 100:.2f}%")
         print(f"F1 Score : {f1_score(self.t_test, t_pred) * 100:.2f}%")
         print(confusion_matrix(self.t_test, t_pred))
+
+    #using cross validation for accuracy
+    def cross_validate(self, folds=5):
+        #optimal param model
+        logmodel = LogisticRegression()
+
+        #use the updated pipeline which processes all the data and fits the model
+        pipeline = updated_pipeline(self.features, logmodel)
+        
+        #create multiple splits and the scoring metrics before running
+        skf = StratifiedKFold(n_splits=folds, shuffle=True, random_state=42)
+        scoring_metrics = ['accuracy', 'precision', 'recall', 'f1']
+
+        #run the splits in parallel
+        cv_results = cross_validate(
+            pipeline, 
+            self.features, 
+            self.targets, 
+            cv=skf, 
+            scoring=scoring_metrics,
+            n_jobs=-1
+        )
+        
+        #output results
+        print("\n*** Average Results Across All Splits ***")
+        print(f"Accuracy : {np.mean(cv_results['test_accuracy']) * 100:.2f}% (+/- {np.std(cv_results['test_accuracy']) * 100:.2f}%)")
+        print(f"Precision: {np.mean(cv_results['test_precision']) * 100:.2f}% (+/- {np.std(cv_results['test_precision']) * 100:.2f}%)")
+        print(f"Recall   : {np.mean(cv_results['test_recall']) * 100:.2f}% (+/- {np.std(cv_results['test_recall']) * 100:.2f}%)")
+        print(f"F1 Score : {np.mean(cv_results['test_f1']) * 100:.2f}% (+/- {np.std(cv_results['test_f1']) * 100:.2f}%)")
+
 
 '''
 the literature recommends XGBoost
@@ -153,7 +190,7 @@ class XGBoostModel():
             random_state=42
         )
 
-        #apply smote only on the training data
+        #apply smote on the training data
         smote_enn = SMOTEENN(random_state=42)
         self.f_train, self.t_train = smote_enn.fit_resample(self.f_train, self.t_train)
 
@@ -161,25 +198,60 @@ class XGBoostModel():
         #create a XGBclassiifier for classification and then fit to data 
         #potentially want to experiment with somte
         self.model = XGBClassifier(
-            n_estimators=200,
-            learning_rate=0.1,
-            max_depth=5,
-            subsample=0.8,
-            colsample_bytree=0.8,
+            n_estimators=275,
+            learning_rate=0.03,
+            max_depth=7,
+            subsample=0.78,
+            colsample_bytree=0.68,
             eval_metric="logloss"
         )
 
         self.model.fit(self.f_train, self.t_train)
-
+        
     def model_results(self):
         #align the correct features after info gain
-        aligned_f_test = self.f_test[self.model.feature_names_in_]
-        t_pred = self.model.predict(aligned_f_test)
+        t_pred = self.model.predict(self.f_test)
         print(f"Accuracy : {accuracy_score(self.t_test, t_pred) * 100:.2f}%")
         print(f"Precision: {precision_score(self.t_test, t_pred) * 100:.2f}%")
         print(f"Recall   : {recall_score(self.t_test, t_pred) * 100:.2f}%")
         print(f"F1 Score : {f1_score(self.t_test, t_pred) * 100:.2f}%")
         print(confusion_matrix(self.t_test, t_pred))
+
+    #using cross validation for accuracy - didnt work as wanted (ignore)
+    def cross_validate(self, folds=5):
+        #optimal param model
+        xgb_model = XGBClassifier(
+            n_estimators=275, 
+            learning_rate=0.03,
+            max_depth=7,
+            subsample=0.78,
+            colsample_bytree=0.,
+            eval_metric="logloss"
+        )
+
+        #use the updated pipeline which processes all the data and fits the model
+        pipeline = updated_pipeline(self.features, xgb_model)
+        
+        #create multiple splits and the scoring metrics before running
+        skf = StratifiedKFold(n_splits=folds, shuffle=True, random_state=42)
+        scoring_metrics = ['accuracy', 'precision', 'recall', 'f1']
+
+        #run the splits in parallel
+        cv_results = cross_validate(
+            pipeline, 
+            self.features, 
+            self.targets, 
+            cv=skf, 
+            scoring=scoring_metrics,
+            n_jobs=-1
+        )
+        
+        #output results
+        print("\n*** Average Results Across All Splits ***")
+        print(f"Accuracy : {np.mean(cv_results['test_accuracy']) * 100:.2f}% (+/- {np.std(cv_results['test_accuracy']) * 100:.2f}%)")
+        print(f"Precision: {np.mean(cv_results['test_precision']) * 100:.2f}% (+/- {np.std(cv_results['test_precision']) * 100:.2f}%)")
+        print(f"Recall   : {np.mean(cv_results['test_recall']) * 100:.2f}% (+/- {np.std(cv_results['test_recall']) * 100:.2f}%)")
+        print(f"F1 Score : {np.mean(cv_results['test_f1']) * 100:.2f}% (+/- {np.std(cv_results['test_f1']) * 100:.2f}%)")
 
 '''
 comparing with a NN model
@@ -193,25 +265,18 @@ class NNModel():
         self.model_path = os.path.join(BASE_DIR, "saved_models", model_path)
 
         #prepare data and split
-        start_training = time.perf_counter()
         try:
             self.load_data(self.data_path)
         except Exception as e:
             self.data_setup(self.data_path)
         self.split_data()
-        end_training = time.perf_counter()
 
-        start_loading = time.perf_counter()
         #try to load model if it exists if not train and save
         try:
             self.load_model(self.model_path)
         except Exception as e:
             self.train_model()
             self.save_model(self.model_path)
-        end_loading = time.perf_counter()
-
-        print(f'Preprocess time {end_training-start_training:.3f}s')
-        print(f'Model time {end_loading-start_loading:.3f}s')
 
     def make_clean(self, model_path="logistic_model.pk1", data_path="data/preprocessed.pk1"):
         data_path = os.path.join(BASE_DIR, data_path)
@@ -246,20 +311,19 @@ class NNModel():
             test_size=0.2,
             random_state=42
         )
-        #apply smote only on the training data
+
+        #apply smote on the training data
         smote_enn = SMOTEENN(random_state=42)
         self.f_train, self.t_train = smote_enn.fit_resample(self.f_train, self.t_train)
 
     def train_model(self):
         #create a NN classifier for classification
-        #allow early stopping
-        #mess around with epochs and learning rate using optuna later
         self.model = MLPClassifier(
-            hidden_layer_sizes=(64, 32),
-            activation='relu',           
+            hidden_layer_sizes=(40, 20),
+            activation='tanh',           
             solver='adam',               
             learning_rate_init=0.001,
-            max_iter=300,               
+            max_iter=170,               
             early_stopping=True,     
             random_state=42
         )
@@ -274,21 +338,62 @@ class NNModel():
         print(f"F1 Score : {f1_score(self.t_test, t_pred) * 100:.2f}%")
         print(confusion_matrix(self.t_test, t_pred))
 
+    #using cross validation for accuracy
+    def cross_validate(self, folds=5):
+        #optimal param model
+        nn_model = MLPClassifier(
+            hidden_layer_sizes=(40, 20),
+            activation='tanh',           
+            solver='adam',               
+            learning_rate_init=0.001,
+            max_iter=170,               
+            early_stopping=True,     
+            random_state=42
+        )
+
+        #use the updated pipeline which processes all the data and fits the model
+        pipeline = updated_pipeline(self.features, nn_model)
+        
+        #create multiple splits and the scoring metrics before running
+        skf = StratifiedKFold(n_splits=folds, shuffle=True, random_state=42)
+        scoring_metrics = ['accuracy', 'precision', 'recall', 'f1']
+
+        #run the splits in parallel
+        cv_results = cross_validate(
+            pipeline, 
+            self.features, 
+            self.targets, 
+            cv=skf, 
+            scoring=scoring_metrics,
+            n_jobs=-1
+        )
+        
+        #output results
+        print("\n*** Average Results Across All Splits ***")
+        print(f"Accuracy : {np.mean(cv_results['test_accuracy']) * 100:.2f}% (+/- {np.std(cv_results['test_accuracy']) * 100:.2f}%)")
+        print(f"Precision: {np.mean(cv_results['test_precision']) * 100:.2f}% (+/- {np.std(cv_results['test_precision']) * 100:.2f}%)")
+        print(f"Recall   : {np.mean(cv_results['test_recall']) * 100:.2f}% (+/- {np.std(cv_results['test_recall']) * 100:.2f}%)")
+        print(f"F1 Score : {np.mean(cv_results['test_f1']) * 100:.2f}% (+/- {np.std(cv_results['test_f1']) * 100:.2f}%)")
+
+
 if __name__ == "__main__":
     print("-"*50)
 
     print("Logistic Model:")
     logistic_model = LogisticModel()
+    #logistic_model.cross_validate()
     logistic_model.model_results()
     print("-"*50)
 
     print("XGBoost Model:")
     xg_model = XGBoostModel()
+    #xg_model.cross_validate()
     xg_model.model_results()
     print("-"*50)
 
     print("Neural Net Model:")
     nn_model = NNModel()
+    #nn_model.cross_validate()
     nn_model.model_results()
     print("-"*50)
 

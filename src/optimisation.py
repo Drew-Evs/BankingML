@@ -35,7 +35,7 @@ the SMOTE algorithm
     k - number of nearest neightbours
 @outputs: X - input features with additional data
 '''
-def apply_smote(X_train, Y_train, k=6):
+def apply_smote(X_train, Y_train, k=7):
     #save feature names
     feature_names = X_train.columns
     target_name = 'y'
@@ -151,20 +151,144 @@ def apply_smote_enn(X_train, Y_train):
     
     return X_balanced_df, Y_balanced_series
 
+import optuna
+import pandas as pd
+import time
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import f1_score
+
+#preprocessing
+from sklearn.compose import ColumnTransformer
+from sklearn.preprocessing import OneHotEncoder, MinMaxScaler
+from imblearn.combine import SMOTEENN
+from imblearn.over_sampling import SMOTE
+
+from xgboost import XGBClassifier
+from sklearn.neural_network import MLPClassifier
+
+#preprocesses the data as it would in the pipeline
+def load_and_preprocess_globally():
+    print("Loading data")
+    X_raw, Y_raw = import_data()
+    X, Y = prepare_data(X_raw, Y_raw)
+    
+    #split data
+    X_train, X_test, Y_train, Y_test = train_test_split(
+        X, Y, test_size=0.2, random_state=42
+    )
+
+    print("Processing data")
+    num_cols = X_train.select_dtypes(include='number').columns
+    cat_cols = X_train.select_dtypes(include='object').columns
+    encoder = ColumnTransformer([
+        ("num", "passthrough", num_cols),
+        ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), cat_cols)
+    ])
+
+    X_train_enc = encoder.fit_transform(X_train)
+    X_test_enc = encoder.transform(X_test)
+
+    #SMOTE training data
+    custom_smote = SMOTE(k_neighbors=7, random_state=42)
+    smote_enn = SMOTEENN(smote=custom_smote, random_state=42)
+    X_train_bal, Y_train_bal = smote_enn.fit_resample(X_train_enc, Y_train)
+
+    #finally scale
+    scaler = MinMaxScaler()
+    X_train_final = scaler.fit_transform(X_train_bal)
+    X_test_final = scaler.transform(X_test_enc)
+
+    print(f"Preprocessing complete. Balanced Training Shape: {X_train_final.shape}")
+    
+    return X_train_final, X_test_final, Y_train_bal, Y_test
+
+#for optimising xgboost
+def objective_xgb(trial, X_train, X_test, Y_train, Y_test):
+    #suggested params per trial
+    param = {
+        'n_estimators': trial.suggest_int('n_estimators', 50, 300),
+        'learning_rate': trial.suggest_float('learning_rate', 0.01, 0.3, log=True),
+        'max_depth': trial.suggest_int('max_depth', 3, 9),
+        'subsample': trial.suggest_float('subsample', 0.5, 1.0),
+        'colsample_bytree': trial.suggest_float('colsample_bytree', 0.5, 1.0),
+        'eval_metric': 'logloss',
+        'random_state': 42,
+        'n_jobs': -1
+    }
+
+    #initiate/fit model
+    xgb_model = XGBClassifier(**param)
+    xgb_model.fit(X_train, Y_train)
+
+    #inference time and f1 score
+    start_time = time.perf_counter()
+    preds = xgb_model.predict(X_test)
+    inference_time = time.perf_counter() - start_time
+    f1 = f1_score(Y_test, preds)
+    
+    return f1, inference_time
+
+#same for neural net
+def objective_nn(trial, X_train, X_test, Y_train, Y_test):
+    n_layers = trial.suggest_int('n_layers', 1, 2)
+    layers = []
+    for i in range(n_layers):
+        layers.append(trial.suggest_int(f'n_units_l{i}', 16, 64))
+    
+    param = {
+        'hidden_layer_sizes': tuple(layers),
+        'activation': trial.suggest_categorical('activation', ['relu', 'tanh']),
+        'solver': 'adam', 
+        'learning_rate_init': trial.suggest_float('learning_rate_init', 1e-4, 1e-2, log=True),
+        'max_iter': trial.suggest_int('max_iter', 100, 300),
+        'early_stopping': True,
+        'random_state': 42
+    }
+
+    nn_model = MLPClassifier(**param)
+    nn_model.fit(X_train, Y_train)
+
+    start_time = time.perf_counter()
+    preds = nn_model.predict(X_test)
+    inference_time = time.perf_counter() - start_time
+
+    f1 = f1_score(Y_test, preds)
+    
+    return f1, inference_time
+
+#execution loop
 if __name__ == "__main__":
-    #avoid circular imports
+        
+    # Custom imports
     from data_experiments import import_data
     from preprocessing_pipeline import prepare_data
 
-    #import prep and balance data
-    print("Importing Data")
-    X, Y = import_data()
-    print("Preparing Data")
-    X, Y = prepare_data(X, Y)
-    #X, Y = apply_smote(X, Y)
-    print("Running Info Gain")
-    info_gain = calc_info_gain(X, Y)
-    print(info_gain)
+    #do the split and preprocess
+    X_train_final, X_test_final, Y_train_bal, Y_test = load_and_preprocess_globally()
 
-    #and plot 
-    #plot_information_gain(info_gain)
+    print("\n" + "="*50)
+    print("Starting Lightning-Fast XGBoost Optimization...")
+    print("Maximizing F1 Score | Minimizing Inference Time")
+    print("="*50)
+    
+    #setup study 
+    study_xgb = optuna.create_study(directions=['maximize', 'minimize'], study_name="XGB_Time_vs_F1")
+    study_xgb.optimize(lambda trial: objective_xgb(trial, X_train_final, X_test_final, Y_train_bal, Y_test), n_trials=30)
+    
+    print("\n*** XGBoost Pareto Front (Best Trade-offs) ***")
+    for i, trial in enumerate(study_xgb.best_trials):
+        print(f"\nOption {i+1}: F1: {trial.values[0]:.4f} | Time: {trial.values[1]:.5f}s")
+        print(f"Params: {trial.params}")
+
+    print("\n" + "="*50)
+    print("Starting Lightning-Fast Neural Network Optimization...")
+    print("Maximizing F1 Score | Minimizing Inference Time")
+    print("="*50)
+
+    study_nn = optuna.create_study(directions=['maximize', 'minimize'], study_name="NN_Time_vs_F1")
+    study_nn.optimize(lambda trial: objective_nn(trial, X_train_final, X_test_final, Y_train_bal, Y_test), n_trials=30)
+    
+    print("\n*** Neural Network Pareto Front (Best Trade-offs) ***")
+    for i, trial in enumerate(study_nn.best_trials):
+        print(f"\nOption {i+1}: F1: {trial.values[0]:.4f} | Time: {trial.values[1]:.5f}s")
+        print(f"Params: {trial.params}")

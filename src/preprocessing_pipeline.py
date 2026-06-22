@@ -21,6 +21,7 @@ set_config(transform_output="pandas")
 #allow inclusion of SMOTE in the pipeline
 from imblearn.pipeline import Pipeline as ImbPipeline
 from imblearn.combine import SMOTEENN
+from imblearn.over_sampling import SMOTE
 
 from optimisation import apply_info_gain, calc_info_gain
 
@@ -37,8 +38,8 @@ class CustomImputer(BaseEstimator, TransformerMixin):
     def transform(self, X):
         X = X.copy()
 
-        #need to drop duration (cant know before call)
-        X = X.drop('duration', axis=1, errors='ignore')
+        #need to drop duration (cant know before call) - keep it in
+        #X = X.drop('duration', axis=1, errors='ignore')
 
         return X
     
@@ -64,13 +65,14 @@ class InfoGainSelection(BaseEstimator, TransformerMixin):
 '''
 build the updated pipeline
 '''
-def updated_pipeline(X, threshold=0.002):
+def updated_pipeline(X, model, threshold=0.0):
     #clean duration column
-    imputer = CustomImputer()
-    X_clean = imputer.transform(X)
+    #keep duration in
+    #imputer = CustomImputer()
+    #X_clean = imputer.transform(X)
 
-    num_cols = X_clean.select_dtypes(include='number').columns
-    cat_cols = X_clean.select_dtypes(include='object').columns
+    num_cols = X.select_dtypes(include='number').columns
+    cat_cols = X.select_dtypes(include='object').columns
 
     #preprocess with a one hot encoder
     preprocessor = ColumnTransformer([
@@ -78,13 +80,16 @@ def updated_pipeline(X, threshold=0.002):
         ("cat", OneHotEncoder(handle_unknown="ignore", sparse_output=False), cat_cols)
     ])
 
+    #custom smote to increase number of neighbours
+    custom_smote = SMOTE(k_neighbors=7, random_state=42)
+
     #the full pipeline as described in https://hrcak.srce.hr/file/452496
     full_pipeline = ImbPipeline([
-        ("imputer", imputer),
+        #("imputer", imputer),
         ("encode", preprocessor),                        
-        ("smote_enn", SMOTEENN(random_state=42)),        
-        ("info_gain", InfoGainSelection(threshold=threshold)),   
-        ("scaler", StandardScaler()),          
+        ("smote_enn", SMOTEENN(smote=custom_smote, random_state=42)),        
+        ("scaler", MinMaxScaler()),       
+        ("classifier", model)   
     ])
 
     return full_pipeline
@@ -168,6 +173,7 @@ def prepare_data(X, Y):
 
     print(f"Preprocessing Complete. Final Data Shape: {X_final.shape}")
     return X_final, Y_prepared
+
 
 '''
 found that evening the number of yes/no rows improves the flow of the data
