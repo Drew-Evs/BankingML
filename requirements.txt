@@ -5,3 +5,4 @@ ucimlrepo
 joblib
 xgboost
 imbalanced-learn
+optuna
