@@ -3,21 +3,39 @@
 '''
 import pandas as pd
 import matplotlib.pyplot as plt
+import os
 
 '''
 importing the data from the repo 
 @returns: X - the features & data
         Y - target data
 '''
-def import_data():
-    from ucimlrepo import fetch_ucirepo 
-
-    #fetch dataset
-    bank_marketing = fetch_ucirepo(id=222) 
+def import_data(data_folder="data"):
+    x_path = os.path.join(data_folder, "X_features.csv")
+    y_path = os.path.join(data_folder, "Y_targets.csv")
     
-    #converts to pandas
-    X = bank_marketing.data.features 
-    Y = bank_marketing.data.targets 
+    #has data already been saved
+    if os.path.exists(x_path) and os.path.exists(y_path):
+        print("Loading dataset from local files")
+        X = pd.read_csv(x_path)
+        Y = pd.read_csv(y_path)
+
+    #or need to load and save
+    else:
+        from ucimlrepo import fetch_ucirepo 
+
+        #fetch dataset
+        bank_marketing = fetch_ucirepo(id=222) 
+        
+        #converts to pandas
+        X = bank_marketing.data.features 
+        Y = bank_marketing.data.targets 
+
+        #convert to csv and save
+        os.makedirs(data_folder, exist_ok=True)
+        X.to_csv(x_path, index=False)
+        Y.to_csv(y_path, index=False)
+        print(f"Data saved locally to {data_folder}/")
     
     return X, Y
 
