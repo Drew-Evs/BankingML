@@ -49,7 +49,7 @@ def load_and_preprocess():
 
     #then split train 70/30 into train/validate (not sure if this is the righ way)
     X_train, X_validate, Y_train, Y_validate = train_test_split(
-        X_train, Y_train, test_size=0.2, random_state=42
+        X_train, Y_train, test_size=0.3, random_state=42
     )
 
     print("Imputing Data")
@@ -90,7 +90,10 @@ def create_xgb_model(X_train, Y_train, params):
 def param_trial(trial, X_train, Y_train, X_validate, Y_validate, params, run):
     #adjust params
     params['n_estimators'] = trial.suggest_int('n_estimators', 50, 750)
-    params['learning_rate'] = trial.suggest_float('learning_rate', 0, 2)
+    params['learning_rate'] = trial.suggest_float('learning_rate', 0, 0.5)
+    params['max_depth'] = trial.suggest_int('max_depth', 2, 12)
+    params['subsample'] = trial.suggest_float('subsample', 0.3, 1)
+    params['colsample_bytree'] = trial.suggest_float('colsample_bytree', 0.3, 1)
 
     #create model
     xgb_model = create_xgb_model(X_train, Y_train, params)
@@ -118,11 +121,13 @@ def param_trial(trial, X_train, Y_train, X_validate, Y_validate, params, run):
         "Learning Rate": params['learning_rate'],
         "Num estimators": params['n_estimators'],
         "Trial": trial.number,
-        "Depth": 7,
+        "Depth": params['max_depth'],
+        "Row Sampling": params['subsample'], 
+        "Column Sampling": params['colsample_bytree'],
     })
 
     #goal is to maximise f1 & minimise time
-    return loss
+    return f1, inference_time
 
 if __name__ == "__main__":
     #preprocess data
@@ -135,9 +140,6 @@ if __name__ == "__main__":
         config={
             "model": "XGBoost",
             "dataset": "Portugese Telemarketing",
-            "max_depth": 7,
-            "subsample": 0.8,
-            "colsample_bytree": 0.7,
             "eval_metric": "logloss",
         },
     )
@@ -150,7 +152,9 @@ if __name__ == "__main__":
     run.define_metric("Time", step_metric="Trial")
     run.define_metric("Learning Rate", step_metric="Trial")
     run.define_metric("Num estimators", step_metric="Trial")
-    run.define_metric("Depth")
+    run.define_metric("Depth", step_metric="Trial")
+    run.define_metric("Row Sampling", step_metric="Trial")
+    run.define_metric("Column Sampling", step_metric="Trial")
 
     #creating the optuna trial
     print("XGBoost Optimisation")
@@ -165,7 +169,7 @@ if __name__ == "__main__":
         "eval_metric": "logloss",
     }
 
-    study_xgb = optuna.create_study(directions=['minimize'], study_name="XGB_Time_vs_F1")
+    study_xgb = optuna.create_study(directions=['maximize', 'minimize'], study_name="XGB_Time_vs_F1")
     study_xgb.optimize(lambda trial: param_trial(trial, X_train, Y_train, X_validate, Y_validate, params, run), n_trials=30)
 
     run.finish()
