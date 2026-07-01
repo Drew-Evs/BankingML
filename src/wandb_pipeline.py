@@ -87,13 +87,20 @@ def create_xgb_model(X_train, Y_train, params):
     return model
 
 #using an optuna trial (start with just 2 variables to log)
-def param_trial(trial, X_train, Y_train, X_validate, Y_validate, params, run):
-    #adjust params
-    params['n_estimators'] = trial.suggest_int('n_estimators', 50, 750)
-    params['learning_rate'] = trial.suggest_float('learning_rate', 0, 0.5)
-    params['max_depth'] = trial.suggest_int('max_depth', 2, 12)
-    params['subsample'] = trial.suggest_float('subsample', 0.3, 1)
-    params['colsample_bytree'] = trial.suggest_float('colsample_bytree', 0.3, 1)
+def train_sweep():
+    #initiate runs
+    run = wandb.init()
+
+    #pull hyperparameters and link to model
+    config = wandb.config
+    params = {
+        "max_depth": config.max_depth,
+        "n_estimators": config.n_estimators,
+        "learning_rate": config.learning_rate,
+        "subsample": config.subsample,
+        "colsample_bytree": config.colsample_bytree,
+        "eval_metric": "logloss",
+    }
 
     #create model
     xgb_model = create_xgb_model(X_train, Y_train, params)
@@ -112,7 +119,7 @@ def param_trial(trial, X_train, Y_train, X_validate, Y_validate, params, run):
     acc = accuracy_score(Y_validate, preds)
     loss = log_loss(Y_validate, probs)
 
-    #logging values by trial
+    #logging values
     run.log({
         "Accuracy": acc, 
         "Loss": loss,
@@ -120,56 +127,40 @@ def param_trial(trial, X_train, Y_train, X_validate, Y_validate, params, run):
         "Time": inference_time,
         "Learning Rate": params['learning_rate'],
         "Num estimators": params['n_estimators'],
-        "Trial": trial.number,
         "Depth": params['max_depth'],
         "Row Sampling": params['subsample'], 
         "Column Sampling": params['colsample_bytree'],
     })
 
-    #goal is to maximise f1 & minimise time
-    return f1, inference_time
-
 if __name__ == "__main__":
     #preprocess data
+    global X_train, X_validate, Y_train, Y_validate
     X_train, X_validate, Y_train, Y_validate = load_and_preprocess()
 
-    #setup a wandb run
-    run = wandb.init(
-        entity="heronic-technologies",
-        project="BankingMLProject",
-        config={
-            "model": "XGBoost",
-            "dataset": "Portugese Telemarketing",
-            "eval_metric": "logloss",
-        },
-    )
-
-    #block out for now - only want trial
-    run.define_metric("Trial")
-    run.define_metric("Accuracy", step_metric="Trial")
-    run.define_metric("Loss", step_metric="Trial")
-    run.define_metric("F1 Score", step_metric="Trial")
-    run.define_metric("Time", step_metric="Trial")
-    run.define_metric("Learning Rate", step_metric="Trial")
-    run.define_metric("Num estimators", step_metric="Trial")
-    run.define_metric("Depth", step_metric="Trial")
-    run.define_metric("Row Sampling", step_metric="Trial")
-    run.define_metric("Column Sampling", step_metric="Trial")
-
-    #creating the optuna trial
+    #creating the wandb sweep
     print("XGBoost Optimisation")
     
     #initial params
-    params = {
-        "max_depth": 7,
-        "n_estimators": 275,
-        "learning_rate": 0.03,
-        "subsample": 0.8,
-        "colsample_bytree": 0.7,
-        "eval_metric": "logloss",
+    #adjust params with a sweep configuration
+    sweep_config = {
+        'method': 'bayes',  
+        'metric': {
+            'name': 'F1 Score',
+            'goal': 'maximize'   
+        },
+        'parameters': {
+            'n_estimators': {'min': 50, 'max': 750},
+            'learning_rate': {'value': 0.1}, 
+            'max_depth': {'value': 6},
+            'subsample': {'min': 0.3, 'max': 1.0},
+            'colsample_bytree': {'min': 0.3, 'max': 1.0}
+        }
     }
 
-    study_xgb = optuna.create_study(directions=['maximize', 'minimize'], study_name="XGB_Time_vs_F1")
-    study_xgb.optimize(lambda trial: param_trial(trial, X_train, Y_train, X_validate, Y_validate, params, run), n_trials=30)
+    sweep_id = wandb.sweep(
+        sweep=sweep_config, 
+        project="BankingMLProject", 
+        entity="heronic-technologies"
+    )
 
-    run.finish()
+    wandb.agent(sweep_id, function=train_sweep, count=30)
