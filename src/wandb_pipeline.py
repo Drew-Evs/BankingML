@@ -309,10 +309,77 @@ def return_results(xgb_model, X_validate, Y_validate):
 
     return f1, acc, loss, inference_time
 
+#tuning the decision threshold 
+def threshold_sweep():
+    #adjust params with a sweep configuration
+    sweep_config = {
+        'method': 'bayes',  
+        'metric': {
+            'name': 'Combined Score',
+            'goal': 'maximize'   
+        },
+        'parameters': {
+            'threshold': {'min': 0.05, 'max': 0.95},
+        }
+    }
+    
+    #using static parameters for the model (selected from best perfroming)
+    params = {
+        "max_depth": 6,
+        "n_estimators": 500,
+        "learning_rate": 0.15,
+        "subsample": 0.83,
+        "colsample_bytree": 0.99,
+        "eval_metric": "logloss",
+    }
+
+    #create model as global for this its the train and validate that change
+    global xgb_model
+    xgb_model = XGBClassifier(**params)
+
+    #keep data global (can do due to seperation of smote)
+    global X_train, X_validate, Y_train, Y_validate
+    X_train, X_validate, Y_train, Y_validate = load_and_preprocess()
+    X_train, Y_train = apply_smote(5, X_train, Y_train)
+
+    xgb_model.fit(X_train, Y_train)
+
+    sweep_id = wandb.sweep(
+        sweep=sweep_config, 
+        project="BankingMLProject", 
+        entity="heronic-technologies"
+    )
+
+    #large number of sweeps as little to do
+    wandb.agent(sweep_id, function=threshold_trial, count=35)
+
+#test a threshold and return the f1 and accuracy
+def threshold_trial():
+    run = wandb.init()
+    config = wandb.config
+
+    #calculate probability of being in class 1
+    probs = xgb_model.predict_proba(X_validate)[:, 1]
+
+    #move the decision threshold
+    preds = (probs >= config.threshold).astype(int)
+    f1 = f1_score(Y_validate, preds)
+    acc = accuracy_score(Y_validate, preds)
+
+    #then log on the run
+    run.log({
+        "Combined Score": (acc+f1)/2,
+        "Accuracy": acc, 
+        "F1 Score": f1,
+        "Decision Threshold": config.threshold,
+    })
+
+
 '''
 want to allow different sweeps for different goals
 usage: - python wandb_pipeline.py parameters - runs a hypereparameter optimisation
     - python wandb_pipeline.py data - alters the data processing pipeline
+    - python wandb_pipeline.py threshold - alters the decision threshold
 '''
 if __name__ == "__main__":
     import sys
@@ -324,6 +391,8 @@ if __name__ == "__main__":
         param_sweep()
     elif sys.argv[1] == "data":
         data_processing_sweep()
+    elif sys.argv[1] == "threshold":
+        threshold_sweep()
     else:
-        print("<goal> must be 'data' or 'parameter'")
+        print("<goal> must be 'data' or 'parameter' or 'threshold'")
         sys.exit(1)
