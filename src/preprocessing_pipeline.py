@@ -39,7 +39,7 @@ class CustomImputer(BaseEstimator, TransformerMixin):
         X = X.copy()
 
         #need to drop duration (cant know before call) - keep it in
-        #X = X.drop('duration', axis=1, errors='ignore')
+        X = X.drop('duration', axis=1, errors='ignore')
 
         return X
     
@@ -143,6 +143,9 @@ def prepare_data(X, Y):
     mask = X[['job', 'education']].notna().all(axis=1)
     X = X[mask]
     Y = Y[mask]
+
+    '''split here fit transform train
+    just transform the test'''
 
     #encoding y with a label encoder
     le = LabelEncoder()

@@ -193,7 +193,7 @@ def load_and_preprocess_globally():
     smote_enn = SMOTEENN(smote=custom_smote, random_state=42)
     X_train_bal, Y_train_bal = smote_enn.fit_resample(X_train_enc, Y_train)
 
-    #finally scale
+    #finally scale - do it like this 
     scaler = MinMaxScaler()
     X_train_final = scaler.fit_transform(X_train_bal)
     X_test_final = scaler.transform(X_test_enc)
@@ -202,7 +202,9 @@ def load_and_preprocess_globally():
     
     return X_train_final, X_test_final, Y_train_bal, Y_test
 
-#for optimising xgboost
+#for optimising xgboost 
+'''either use train validate test (use validate for this)
+or cross validation - keep test fixed (untouched)'''
 def objective_xgb(trial, X_train, X_test, Y_train, Y_test):
     #suggested params per trial
     param = {
